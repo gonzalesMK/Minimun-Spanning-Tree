@@ -3,6 +3,9 @@
 #include <ctime>
 #include <cstdlib>
 #include <list>
+#include <fstream>
+#include <iterator>
+#include <algorithm>
 
 #define DEBUG 0
 #define DEBUG_PRIM 0
@@ -55,10 +58,12 @@ inline void Queue::Insert( int cost, int start, int end){
     #if DEBUG
         std::cout << "Inserting new path: " << path << std::endl;
     #endif // DEBUG
-    // If set is empty, it puts the first element
-    if( this->set.empty()){
+
+    //! If set is empty, it puts the first element
+    if( this->set.empty() ){
         set.push_back(path);
-    } // If not, put path in the right position
+    }
+    //! If not, put path in the right position
     else{
         std::list<Path>::iterator it = set.begin();
         for(; it != set.end(); it++){
@@ -76,6 +81,7 @@ inline void Queue::Insert( int cost, int start, int end){
     #endif // DEBUG
 }
 
+//! Delete a specific vertice
 inline void Queue::Delete(int vertice){
     for( int i = 0 ; i < SIZE ; i ++){
         Path path = { 0 , i , vertice};
@@ -85,8 +91,7 @@ inline void Queue::Delete(int vertice){
 /*************CLASS GRAPH ****************/
 class Graph{
 public:
-    std::vector< std::vector<int> > graph;
-    Graph(int d = DENSITY, int s = SIZE):size(s),density(d){
+    Graph(int s,  int d = DENSITY):size(s),density(d){
         for( int i = 0; i < size; ++i){
             std::vector<int> row; // Create an empty row
             for( int j=0; j < size; j++)
@@ -95,6 +100,8 @@ public:
         }
         FillGraph();
     }
+    Graph(){}
+    Graph( char *p);
     void FillGraph();                                      /// Fill the graph
     bool adjacent(int x, int y);                           /// Return true if points are connected
     std::vector<int> neighbors(int x);                     /// Return a vector with neighbors points
@@ -103,8 +110,10 @@ public:
     void MST( int source);                                 /// Return Minimum Spanning Tree ( Jarnik-Prim algorithms)
     friend std::ostream& operator<<( std::ostream& out, Graph& g);
 private:
+   std::vector< std::vector<int>>  graph;
    int size, density;
 };
+
 
 /// Fill the Graph with distances
 inline void Graph::FillGraph(){
@@ -164,11 +173,11 @@ int Graph::Short_Path(int source, int target){
         std::vector<int> vec = neighbors(u);
         if (u == target)
             goal=true;                  /// Quit search if target is found
-        for(std::vector<int>::iterator it = vec.begin(); it != vec.end(); ++it){
-            int new_cost = cost[u] + graph[u][*it];
-            if( new_cost < cost[*it]){     /// A shorter path to v has been found
-                cost[*it] = new_cost;
-                prev[*it] = u;
+        for( auto it : vec){
+            int new_cost = cost[u] + graph[u][it];
+            if( new_cost < cost[it]){     /// A shorter path to v has been found
+                cost[it] = new_cost;
+                prev[it] = u;
             }
         }
     }
@@ -176,38 +185,38 @@ int Graph::Short_Path(int source, int target){
 }
 
 void Graph::MST(int source){
-     std::list<int> Close_set;
+     std::list<Path> Close_set;
      int cost = 0;
      Queue Open_set;
-     Close_set.push_back(source);
+     Close_set.push_back( {0 ,source, source} );
 
     // Inicialize Open Set with source neighbors
     std::vector<int> neighbor = neighbors(source);
-    for( std::vector<int>::iterator it = neighbor.begin() ; it != neighbor.end(); it++ ) //! Add all sources neighbors
-        Open_set.Insert( graph[source][*it] , source , *it);
+    for( auto it : neighbor) //! Add all sources neighbors
+        Open_set.Insert( graph[source][it] , source , it);
 
     int vertices = 1;
     while( vertices < (size) && !Open_set.empty()){
         int  flag = 0;
         Path path = Open_set.Best();              //! Get best path
         Open_set.Delete(path);                   //! Delete that path to not have redundant paths
-        for( std::list<int>::iterator it = Close_set.begin() ; it != Close_set.end(); it++ ){ //! Check if there is already a path for that Vertice
-            if (path.end == *it) flag++;
+        for( std::list<Path>::iterator it = Close_set.begin() ; it != Close_set.end(); it++ ){ //! Check if there is already a path for that Vertice
+            if (path.end == it->end) flag++;
         }
 
         if( flag == 0 ){  //! If it's a new vertice...
-            Close_set.push_back(path.end);
+            Close_set.push_back(path);
             cost += path.cost;
             std::vector<int> vertice_neighbors = neighbors(path.end);
-            for( std::vector<int>::iterator it = vertice_neighbors.begin() ; it != vertice_neighbors.end(); it++ ) //! Put all neighbors of Vertice in the Open Set
-                Open_set.Insert( graph[path.end][*it] , path.end , *it );
-            for( std::list<int>::iterator it = Close_set.begin(); it != Close_set.end() ; it++)
-                Open_set.Delete( *it );
+            for( auto it : vertice_neighbors ) //! Put all neighbors of Vertice in the Open Set
+                Open_set.Insert( graph[path.end][it] , path.end , it );
+            for( auto it : Close_set) //! Remove repeted paths
+                Open_set.Delete( it );
             vertices++;
            #if DEBUG_PRIM
                 std::cout << " OPEN SET ATUAL: " << std::endl << Open_set << std::endl << "CLOSE SET ATUAL(" << vertices << "): " ;
-                for( std::list<int>::iterator it = Close_set.begin() ; it != Close_set.end(); it++ ){ //! Check if there is already a path for that Vertice
-                    std::cout<< *it << " " ;
+                for( std::list<int>::iterator it = Close_set.begin() ; it != Close_set.end(); it++ ){
+                    std::coutcout<< *it << " " ;
                 }
                 std::cout << std::endl << "CAMINHO ESCOLHIDO: " << path ;
                 system("pause");
@@ -215,22 +224,26 @@ void Graph::MST(int source){
 
         }
     }
-    // If a path is found
+    //! If a path is found ( or not):
     if ( vertices == (size )){
-        std::cout<< "The best path is: ";
-        for( std::list<int>::iterator it = Close_set.begin() ; it != Close_set.end(); it++ ){ //! Check if there is already a path for that Vertice
-                std::cout<< *it << " " ;
+        std::cout<< "The best path is: " << std::endl;
+        for( auto it : Close_set){ //
+                std::cout<< it << " " ;
             }
         std::cout<< std::endl << "With cost: " << cost << std::endl;
-    }
+    } //
     else std::cout << "No path found" ;
 
 
 }
 
 int main(){
-    Graph graph;
+    std::ifstream data_file("data.txt"); // text file containing numbers
+    std::istream_iterator<int> start(data_file), end;
+    std::vector<int> data(start,end);      //! Automatic constructor of vector with data of file
+
+    Graph graph( SIZE );
     std::cout<< graph ;
-    graph.MST(1);
+    graph.MST(0);
 
 }
